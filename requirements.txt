@@ -1,0 +1,10 @@
+fastapi==0.104.1
+uvicorn==0.24.0
+supabase==2.0.0
+google-generativeai==0.3.1
+SpeechRecognition==3.10.0
+pyttsx3==2.90
+python-multipart==0.0.6
+websockets==12.0
+aiofiles==23.2.1
+python-dotenv==1.0.0

@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ConciAI Assistant Server</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+        .status {
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 10px;
+            font-weight: bold;
+            text-align: center;
+            font-size: 18px;
+        }
+        .connected { background: rgba(76, 175, 80, 0.8); }
+        .disconnected { background: rgba(244, 67, 54, 0.8); }
+        .listening { background: rgba(255, 193, 7, 0.8); animation: pulse 1.5s infinite; }
+        .conversation-active { background: rgba(76, 175, 80, 0.8); animation: pulse 1s infinite; }
+        .speaking { background: rgba(33, 150, 243, 0.8); }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        
+        button {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            padding: 15px 30px;
+            margin: 10px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        button:hover { 
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+        button:disabled { 
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .conversation {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .message {
+            margin: 10px 0;
+            padding: 10px 15px;
+            border-radius: 10px;
+            max-width: 80%;
+        }
+        
+        .user-message {
+            background: rgba(33, 150, 243, 0.8);
+            margin-left: auto;
+            text-align: right;
+        }
+        
+        .ai-message {
+            background: rgba(255, 255, 255, 0.2);
+            margin-right: auto;
+        }
+        
+        input {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 10px;
+            margin: 5px;
+            border-radius: 8px;
+            width: 200px;
+        }
+        
+        input::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .log {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            height: 150px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        
+        .mic-indicator {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            margin: 30px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .mic-off { background: rgba(244, 67, 54, 0.8); }
+        .mic-listening { background: rgba(255, 193, 7, 0.8); animation: pulse 1.5s infinite; }
+        .mic-conversation { background: rgba(76, 175, 80, 0.8); animation: pulse 1s infinite; }
+        .mic-speaking { background: rgba(33, 150, 243, 0.8); animation: pulse 0.8s infinite; }
+        
+        .mic-status {
+            position: absolute;
+            bottom: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 14px;
+            white-space: nowrap;
+        }
+        
+        .settings {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .text-input {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        
+        .text-input textarea {
+            flex: 1;
+            min-height: 60px;
+            resize: vertical;
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        
+        .text-input textarea::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .silence-timer {
+            text-align: center;
+            margin: 10px 0;
+            font-size: 14px;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 style="text-align: center;"> ConciAI Conversation Assistant</h1>
+        
+        <div id="status" class="status disconnected">Disconnected</div>
+        
+        <div class="mic-indicator mic-off" id="micIndicator">
+            🎤
+            <div class="mic-status" id="micStatus">Microphone Off</div>
+        </div>
+        
+        <div class="silence-timer" id="silenceTimer"></div>
+        
+        <div class="settings">
+            <h3>Settings</h3>
+            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                <div>
+                    <label for="roomNumber">Room Number:</label>
+                    <input type="text" id="roomNumber" value="101" placeholder="Enter room number">
+                </div>
+                <div>
+                    <label for="serverUrl">Server URL:</label>
+                    <input type="text" id="serverUrl" value="ws://localhost:8000/ws/voice" placeholder="WebSocket URL">
+                </div>
+                <div>
+                    <label for="wakeWord">Wake Word:</label>
+                    <input type="text" id="wakeWord" value="wake up" placeholder="Wake word to start conversation">
+                </div>
+            </div>
+        </div>
+        
+        <div style="text-align: center; margin: 20px 0;">
+            <button id="connectBtn" onclick="connect()">Connect</button>
+            <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+        </div>
+        
+        <div class="text-input">
+            <textarea id="textInput" placeholder="Or type your message here..."></textarea>
+            <button onclick="sendTextMessage()">Send</button>
+        </div>
+        
+        <div class="conversation" id="conversation">
+            <div class="message ai-message">Hello! I'm your ConciAI assistant. Say "Hello" to start a conversation, or type your message below.</div>
+        </div>
+        
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let recognition = null;
+        let synthesis = window.speechSynthesis;
+        let isListening = false;
+        let isInConversation = false;
+        let wakeWord = "wake up";
+        let isProcessing = false;
+        let silenceTimer = null;
+        let silenceStartTime = null;
+        const SILENCE_TIMEOUT = 20000; // 20 seconds
+        let lastProcessedText = "";
+        let processingTimeout = null;
+        let isAISpeaking = false;
+
+
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateStatus(message, className) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${className}`;
+        }
+
+        function updateMicIndicator(state) {
+            const micDiv = document.getElementById('micIndicator');
+            const micStatus = document.getElementById('micStatus');
+            
+            micDiv.className = `mic-indicator mic-${state}`;
+            
+            switch(state) {
+                case 'off':
+                    micDiv.textContent = '🎤';
+                    micStatus.textContent = 'Microphone Off';
+                    break;
+                case 'listening':
+                    micDiv.textContent = '👂';
+                    micStatus.textContent = 'Listening for wake word...';
+                    break;
+                case 'conversation':
+                    micDiv.textContent = '💬';
+                    micStatus.textContent = 'In conversation';
+                    break;
+                case 'speaking':
+                    micDiv.textContent = '🔊';
+                    micStatus.textContent = 'AI Speaking - Please Wait';
+                    break;
+            }
+        }
+
+        function updateButtons(connected) {
+            document.getElementById('connectBtn').disabled = connected;
+            document.getElementById('disconnectBtn').disabled = !connected;
+        }
+
+        function addMessage(text, isUser = false) {
+            const conversation = document.getElementById('conversation');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'ai-message'}`;
+            messageDiv.textContent = text;
+            conversation.appendChild(messageDiv);
+            conversation.scrollTop = conversation.scrollHeight;
+        }
+
+        function speakText(text) {
+            // Cancel any ongoing speech
+            if (synthesis.speaking) {
+                synthesis.cancel();
+            }
+            
+            // Pause speech recognition while AI is speaking
+            if (recognition && isListening) {
+                recognition.stop();
+                log('Paused speech recognition while AI speaks');
+            }
+            
+            // Wait a moment for cancellation to complete
+            setTimeout(() => {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 0.9;
+                utterance.pitch = 1;
+                utterance.volume = 1;
+                
+                // Try to use a female voice if available
+                const voices = synthesis.getVoices();
+                const femaleVoice = voices.find(voice => 
+                    voice.name.includes('female') || 
+                    voice.name.includes('Female') ||
+                    voice.name.includes('Samantha') ||
+                    voice.name.includes('Victoria')
+                );
+                if (femaleVoice) {
+                    utterance.voice = femaleVoice;
+                }
+                
+                utterance.onstart = () => {
+                    isAISpeaking = true;
+                    updateStatus('Speaking...', 'speaking');
+                    updateMicIndicator('speaking');
+                    log('Started speaking');
+                };
+                
+                utterance.onend = () => {
+                    isAISpeaking = false;
+                    updateStatus('Connected', 'connected');
+                    if (isInConversation) {
+                        updateMicIndicator('conversation');
+                    } else {
+                        updateMicIndicator('listening');
+                    }
+                    log('Finished speaking');
+                    
+                    // Resume speech recognition after AI finishes speaking
+                    setTimeout(() => {
+                        if (isListening && recognition) {
+                            recognition.start();
+                            log('Resumed speech recognition after AI finished speaking');
+                        }
+                    }, 500); // Small delay to prevent echo
+                };
+                
+                synthesis.speak(utterance);
+            }, 100);
+        }
+
+        function startSilenceTimer() {
+            if (silenceTimer) {
+                clearTimeout(silenceTimer);
+            }
+            
+            silenceStartTime = Date.now();
+            silenceTimer = setTimeout(() => {
+                if (isInConversation) {
+                    endConversation();
+                }
+            }, SILENCE_TIMEOUT);
+            
+            updateSilenceTimer();
+        }
+
+        function updateSilenceTimer() {
+            if (!isInConversation || !silenceStartTime) {
+                document.getElementById('silenceTimer').textContent = '';
+                return;
+            }
+            
+            const elapsed = Date.now() - silenceStartTime;
+            const remaining = Math.max(0, SILENCE_TIMEOUT - elapsed);
+            const seconds = Math.ceil(remaining / 1000);
+            
+            document.getElementById('silenceTimer').textContent = `Conversation will end in ${seconds} seconds if no speech detected`;
+            
+            if (remaining > 0) {
+                setTimeout(updateSilenceTimer, 1000);
+            }
+        }
+
+        function resetSilenceTimer() {
+            if (silenceTimer) {
+                clearTimeout(silenceTimer);
+                silenceTimer = null;
+            }
+            silenceStartTime = null;
+            document.getElementById('silenceTimer').textContent = '';
+        }
+
+        function startConversation() {
+            isInConversation = true;
+            updateStatus('In Conversation', 'conversation-active');
+            updateMicIndicator('conversation');
+            startSilenceTimer();
+            log('Conversation started');
+            speakText("Hello! I'm listening. How can I help you today?");
+        }
+
+        function endConversation() {
+            isInConversation = false;
+            updateStatus('Connected', 'connected');
+            updateMicIndicator('listening');
+            resetSilenceTimer();
+            log('Conversation ended due to silence');
+            speakText("I'm going to sleep now. Say hello when you need me again.");
+        }
+
+        function connect() {
+            const serverUrl = document.getElementById('serverUrl').value;
+            log(`Connecting to ${serverUrl}...`);
+            
+            // Close existing connection if any
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            
+            ws = new WebSocket(serverUrl);
+            
+            ws.onopen = function() {
+                log('WebSocket connected successfully');
+                updateStatus('Connected', 'connected');
+                updateButtons(true);
+                initializeSpeechRecognition();
+            };
+            
+            ws.onmessage = function(event) {
+                const response = JSON.parse(event.data);
+                log(`Received response: ${response.status}`);
+                
+                if (response.status === 'success') {
+                    addMessage(response.ai_response, false);
+                    speakText(response.ai_response);
+                } else {
+                    const errorMsg = `Error: ${response.error}`;
+                    addMessage(errorMsg, false);
+                    speakText("I'm sorry, there was an error processing your request.");
+                }
+                
+                isProcessing = false;
+            };
+            
+            ws.onclose = function() {
+                log('WebSocket disconnected');
+                updateStatus('Disconnected', 'disconnected');
+                updateButtons(false);
+                stopListening();
+                ws = null;
+            };
+            
+            ws.onerror = function(error) {
+                log(`WebSocket error: ${error}`);
+                updateStatus('Connection Error', 'disconnected');
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+            }
+        }
+
+        function initializeSpeechRecognition() {
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                log('Speech recognition not supported in this browser');
+                return;
+            }
+            
+            // Stop existing recognition if any
+            if (recognition) {
+                recognition.stop();
+                recognition = null;
+            }
+            
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
+            
+            recognition.onstart = function() {
+                log('Speech recognition started');
+                isListening = true;
+                updateMicIndicator('listening');
+            };
+            
+            recognition.onresult = function(event) {
+                let finalTranscript = '';
+                let interimTranscript = '';
+                
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript;
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+                
+                if (finalTranscript) {
+                    log(`Recognized: "${finalTranscript}"`);
+                    processSpeechInput(finalTranscript);
+                }
+            };
+            
+            recognition.onerror = function(event) {
+                log(`Speech recognition error: ${event.error}`);
+                if (event.error === 'no-speech') {
+                    // Restart listening after a short delay
+                    setTimeout(() => {
+                        if (isListening) {
+                            recognition.start();
+                        }
+                    }, 1000);
+                }
+            };
+            
+            recognition.onend = function() {
+                log('Speech recognition ended');
+                if (isListening) {
+                    // Restart listening
+                    setTimeout(() => {
+                        if (isListening) {
+                            recognition.start();
+                        }
+                    }, 100);
+                }
+            };
+            
+            // Start listening immediately
+            recognition.start();
+        }
+
+        function processSpeechInput(text) {
+            const lowerText = text.toLowerCase();
+            wakeWord = document.getElementById('wakeWord').value.toLowerCase();
+            
+            // Don't process speech while AI is speaking
+            if (isAISpeaking) {
+                log(`AI is speaking, ignoring input: "${text}"`);
+                return;
+            }
+            
+            // Prevent duplicate processing of the same text
+            if (text.toLowerCase() === lastProcessedText.toLowerCase()) {
+                log(`Duplicate text detected, skipping: "${text}"`);
+                return;
+            }
+            
+            // Clear any existing processing timeout
+            if (processingTimeout) {
+                clearTimeout(processingTimeout);
+                processingTimeout = null;
+            }
+            
+            if (!isInConversation && lowerText.includes(wakeWord)) {
+                // Wake word detected - start conversation
+                log(`Wake word "${wakeWord}" detected - starting conversation`);
+                lastProcessedText = text.toLowerCase();
+                startConversation();
+            } else if (isInConversation) {
+                // In conversation mode - send to AI
+                log(`Processing in conversation: "${text}"`);
+                lastProcessedText = text.toLowerCase();
+                addMessage(text, true);
+                sendToAI(text);
+                resetSilenceTimer(); // Reset silence timer on speech
+            } else {
+                log(`Wake word not detected in: "${text}"`);
+            }
+            
+            // Set a timeout to clear the last processed text after 2 seconds
+            processingTimeout = setTimeout(() => {
+                lastProcessedText = "";
+                processingTimeout = null;
+            }, 2000);
+        }
+
+        function sendToAI(text) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('WebSocket not connected');
+                return;
+            }
+            
+            if (isProcessing) {
+                log('Already processing a request, skipping');
+                return;
+            }
+            
+            if (isAISpeaking) {
+                log('AI is currently speaking, skipping request');
+                return;
+            }
+            
+            // Prevent sending empty or very short messages
+            if (!text || text.trim().length < 2) {
+                log('Text too short, skipping');
+                return;
+            }
+            
+            isProcessing = true;
+            const roomNumber = document.getElementById('roomNumber').value;
+            
+            const message = {
+                room_number: roomNumber,
+                text_input: text
+            };
+            
+            log(`Sending to AI: "${text}"`);
+            ws.send(JSON.stringify(message));
+            
+            // Set a timeout to reset processing flag if no response received
+            setTimeout(() => {
+                if (isProcessing) {
+                    log('No response received, resetting processing flag');
+                    isProcessing = false;
+                }
+            }, 10000); // 10 second timeout
+        }
+
+        function stopListening() {
+            isListening = false;
+            if (recognition) {
+                recognition.stop();
+            }
+            resetSilenceTimer();
+            log('Stopped listening');
+        }
+
+        function sendTextMessage() {
+            const textInput = document.getElementById('textInput');
+            const text = textInput.value.trim();
+            
+            if (text) {
+                if (!isInConversation) {
+                    startConversation();
+                }
+                addMessage(text, true);
+                sendToAI(text);
+                textInput.value = '';
+            }
+        }
+
+        // Handle Enter key in text input
+        document.getElementById('textInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendTextMessage();
+            }
+        });
+
+        // Handle page unload
+        window.addEventListener('beforeunload', function() {
+            if (ws) {
+                ws.close();
+            }
+            stopListening();
+            
+            // Clear any timeouts
+            if (processingTimeout) {
+                clearTimeout(processingTimeout);
+            }
+            if (silenceTimer) {
+                clearTimeout(silenceTimer);
+            }
+            
+            // Cancel any ongoing speech
+            if (synthesis.speaking) {
+                synthesis.cancel();
+            }
+        });
+    </script>
+</body>
+</html> 
